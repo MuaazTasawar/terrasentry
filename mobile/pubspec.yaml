@@ -1,0 +1,24 @@
+name: terrasentry_mobile
+description: TerraSentry on-call approval app — approve or reject risky infrastructure changes from your phone.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.1
+  provider: ^6.1.2
+  intl: ^0.19.0
+  flutter_local_notifications: ^17.2.1
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

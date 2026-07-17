@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: terrasentry-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: terrasentry
+      POSTGRES_PASSWORD: terrasentry
+      POSTGRES_DB: terrasentry
+    ports:
+      - "5432:5432"
+    volumes:
+      - terrasentry_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terrasentry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: terrasentry-api
+    restart: unless-stopped
+    env_file:
+      - ../api/.env
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      risk-scoring:
+        condition: service_started
+
+  risk-scoring:
+    build:
+      context: ../risk-scoring
+      dockerfile: Dockerfile
+    container_name: terrasentry-risk-scoring
+    restart: unless-stopped
+    env_file:
+      - ../risk-scoring/.env
+    ports:
+      - "8000:8000"
+
+volumes:
+  terrasentry_pg_data:
