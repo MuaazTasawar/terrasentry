@@ -27,6 +27,7 @@ TerraSentry is an infrastructure governance copilot built for platform and DevOp
 | Local Kubernetes | k3d (k3s in Docker) |
 | Containerization | Docker, Docker Compose |
 | Push Notifications | Firebase Cloud Messaging (FCM) |
+| Testing | Go's built-in `testing` package, pytest + pytest-asyncio |
 
 ## Project Structure
 
@@ -48,7 +49,8 @@ terrasentry/
 │   │   │   └── models.go
 │   │   ├── controller/
 │   │   │   ├── drift_controller.go
-│   │   │   └── reconciler.go
+│   │   │   ├── reconciler.go
+│   │   │   └── reconciler_test.go
 │   │   ├── notify/
 │   │   │   └── push.go
 │   │   └── config/
@@ -72,7 +74,12 @@ terrasentry/
 │   │   ├── models/
 │   │   │   └── schemas.py
 │   │   └── config.py
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── test_risk_engine.py
+│   │   └── test_terraform_parser.py
 │   ├── requirements.txt
+│   ├── pytest.ini
 │   ├── Dockerfile
 │   └── .env.example
 ├── mobile/
@@ -232,6 +239,24 @@ flutter run
 ```
 > Note: on an Android emulator, the API base URL in `mobile/lib/services/api_service.dart` should point to `http://10.0.2.2:8080` instead of `localhost`, since the emulator can't resolve the host machine's localhost directly. On a physical device on the same network, use your machine's LAN IP.
 
+### Running Tests
+
+**Go tests** (drift reconciler diff logic, snapshot extraction, edge cases like nil replicas and empty containers):
+```bash
+cd api
+go test ./... -v
+```
+
+**Python tests** (risk-scoring threshold boundaries, Terraform plan parsing, and LLM-vs-deterministic-threshold override logic — all run with the real LLM call mocked out, so they're free and fast):
+```bash
+cd risk-scoring
+venv\Scripts\activate   # Windows
+# source venv/bin/activate   # macOS/Linux
+pytest -v
+```
+
+Both suites are pure unit tests — no live database, cluster, or API keys required to run them.
+
 ## Environment Variables
 
 ### `api/.env`
@@ -284,6 +309,7 @@ This isn't just scaffolded code — the full loop has been manually tested end-t
 - **Live Kubernetes drift detection**: a local k3d cluster was stood up, the operator was run against it, and a Deployment was scaled directly via `kubectl` (bypassing any Terraform-managed path) to simulate an unauthorized change. The operator correctly detected the drift and wrote a single, accurate event to `drift_events`.
 - **Reconciler correctness fixes**: initial testing surfaced two real bugs in the drift controller — duplicate drift events caused by status-only reconciles, and a resource-version conflict causing retry-induced duplicate writes — both were root-caused and fixed (via a `GenerationChangedPredicate` filter and `retry.RetryOnConflict`, respectively), and re-verified to produce exactly one clean event per real spec change.
 - **CORS and networking**: the Flutter web client, Go API, Postgres (in Docker), and the k3d cluster were all connected and validated communicating correctly across their actual local network boundaries — not just tested in isolation.
+- **Automated test coverage**: beyond manual end-to-end verification, the two highest-risk pieces of logic — the risk-scoring threshold classifier and the drift reconciler's diff/snapshot logic — have unit tests covering boundary conditions (e.g. scores exactly at the medium/high cutoffs), defensive edge cases (nil replica pointers, zero containers), and a regression test asserting the deterministic threshold always overrides a mismatched LLM-claimed risk label. All 15 Python tests and all Go controller tests pass.
 
 ## Phase Build History
 
@@ -295,6 +321,7 @@ This isn't just scaffolded code — the full loop has been manually tested end-t
 | 3 | K8s Drift Controller | Deployment snapshot/diff logic, controller-runtime reconciler, operator entrypoint watching live cluster state for drift |
 | 4 | Approval Flow (API + Mobile) | Approval/device-token migrations, FCM push notifier, full REST handler set (scans, decisions, devices, drift events), Flutter models, API service, approval card widget, home screen, and detail screen |
 | 5 | Polish & Finalize | Multi-stage Go Dockerfile (server + operator), Python Dockerfile, complete project README |
+| 6 | Hardening & Test Coverage | Fixed two reconciler bugs found during live testing (duplicate reconciles, resource-version conflicts); added unit tests for the risk-scoring threshold engine and the drift reconciler's diff/snapshot logic |
 
 ## Roadmap
 
