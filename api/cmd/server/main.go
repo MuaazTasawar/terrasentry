@@ -2,12 +2,11 @@ package main
 
 import (
 	"log"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
-
+	"github.com/MuaazTasawar/terrasentry/api/internal/api"
 	"github.com/MuaazTasawar/terrasentry/api/internal/config"
 	"github.com/MuaazTasawar/terrasentry/api/internal/db"
+	"github.com/MuaazTasawar/terrasentry/api/internal/notify"
 )
 
 func main() {
@@ -21,16 +20,8 @@ func main() {
 
 	log.Println("connected to database")
 
-	router := gin.Default()
-
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-			"env":    cfg.Env,
-		})
-	})
-
-	// Route groups (handlers.go) and middleware (middleware.go) are wired in Phase 4.
+	notifier := notify.NewNotifier(cfg.FCMServerKey, pool)
+	router := api.NewRouter(pool, notifier)
 
 	log.Printf("terrasentry api listening on :%s (%s)", cfg.Port, cfg.Env)
 	if err := router.Run(":" + cfg.Port); err != nil {
