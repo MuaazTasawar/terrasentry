@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.config import settings
+from app.routers import scan
 
 app = FastAPI(
     title="TerraSentry Risk Scoring Service",
@@ -7,6 +8,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(scan.router)
 
 @app.get("/health")
 def health_check():
