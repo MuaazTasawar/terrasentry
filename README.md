@@ -276,6 +276,15 @@ flutter run
 | `GET` | `/health` (risk-scoring service, port 8000) | Risk-scoring service health check |
 | `POST` | `/scan` (risk-scoring service, port 8000) | Score a raw `terraform show -json` plan and return a risk assessment |
 
+## Verified Working
+
+This isn't just scaffolded code — the full loop has been manually tested end-to-end on a local environment:
+
+- **Risk-scored approval flow**: a test scan was inserted with a high-risk score, correctly rendered in the Flutter app with the right risk-color coding, opened into the detail view with full reasoning and plan summary, and approved via the mobile UI. The decision was confirmed written back to the `approval_audit` table with the correct scan reference, decision, and timestamp.
+- **Live Kubernetes drift detection**: a local k3d cluster was stood up, the operator was run against it, and a Deployment was scaled directly via `kubectl` (bypassing any Terraform-managed path) to simulate an unauthorized change. The operator correctly detected the drift and wrote a single, accurate event to `drift_events`.
+- **Reconciler correctness fixes**: initial testing surfaced two real bugs in the drift controller — duplicate drift events caused by status-only reconciles, and a resource-version conflict causing retry-induced duplicate writes — both were root-caused and fixed (via a `GenerationChangedPredicate` filter and `retry.RetryOnConflict`, respectively), and re-verified to produce exactly one clean event per real spec change.
+- **CORS and networking**: the Flutter web client, Go API, Postgres (in Docker), and the k3d cluster were all connected and validated communicating correctly across their actual local network boundaries — not just tested in isolation.
+
 ## Phase Build History
 
 | Phase | Name | What Was Built |
