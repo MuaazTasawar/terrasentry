@@ -9,6 +9,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/MuaazTasawar/terrasentry/api/internal/config"
 	"github.com/MuaazTasawar/terrasentry/api/internal/controller"
@@ -24,7 +25,7 @@ func init() {
 
 func main() {
 	cfg := config.Load()
-
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	pool, err := db.NewPool(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("operator: database connection failed: %v", err)

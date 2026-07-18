@@ -10,7 +10,7 @@ import (
 // NewRouter builds the full route table for the API server.
 func NewRouter(pool *pgxpool.Pool, notifier *notify.Notifier) *gin.Engine {
 	router := gin.New()
-	router.Use(RequestLogger(), ErrorHandler())
+	router.Use(RequestLogger(), ErrorHandler(), CORS())
 
 	h := NewHandler(pool, notifier)
 

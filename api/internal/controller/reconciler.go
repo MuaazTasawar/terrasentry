@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -96,15 +97,25 @@ func (r *DriftReconciler) saveSnapshot(ctx context.Context, deploy *appsv1.Deplo
 		return fmt.Errorf("failed to marshal snapshot: %w", err)
 	}
 
-	if deploy.Annotations == nil {
-		deploy.Annotations = map[string]string{}
-	}
-	deploy.Annotations[LastAppliedAnnotation] = string(raw)
+	// Deployments are updated frequently by Kubernetes' own controllers
+	// (status, conditions, observedGeneration) even when we're not touching
+	// them. Those updates bump resourceVersion and can race with our
+	// annotation write, so we retry on conflict — re-fetching the latest
+	// object each time — instead of letting the whole reconcile fail and
+	// requeue (which would re-detect and re-report the same drift).
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &appsv1.Deployment{}
+		if err := r.Get(ctx, client.ObjectKeyFromObject(deploy), latest); err != nil {
+			return err
+		}
 
-	if err := r.Update(ctx, deploy); err != nil {
-		return fmt.Errorf("failed to save snapshot annotation: %w", err)
-	}
-	return nil
+		if latest.Annotations == nil {
+			latest.Annotations = map[string]string{}
+		}
+		latest.Annotations[LastAppliedAnnotation] = string(raw)
+
+		return r.Update(ctx, latest)
+	})
 }
 
 func snapshotFromDeployment(deploy *appsv1.Deployment) deploymentSnapshot {
