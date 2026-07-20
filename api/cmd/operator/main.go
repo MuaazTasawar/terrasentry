@@ -39,24 +39,39 @@ func main() {
 		log.Fatalf("operator: unable to start manager: %v", err)
 	}
 
-	reconciler := &controller.DriftReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		OnDriftFound: func(ctx context.Context, event db.DriftEvent) error {
-			_, err := pool.Exec(ctx,
-				`INSERT INTO drift_events (resource_kind, resource_name, namespace, diff)
-				 VALUES ($1, $2, $3, $4)`,
-				event.ResourceKind, event.ResourceName, event.Namespace, event.Diff,
-			)
-			return err
-		},
+	// Shared by all three reconcilers below — same insert, different
+	// ResourceKind depending on which watcher found the drift.
+	persistDrift := func(ctx context.Context, event db.DriftEvent) error {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO drift_events (resource_kind, resource_name, namespace, diff)
+			 VALUES ($1, $2, $3, $4)`,
+			event.ResourceKind, event.ResourceName, event.Namespace, event.Diff,
+		)
+		return err
 	}
 
-	if err := reconciler.SetupWithManager(mgr); err != nil {
-		log.Fatalf("operator: unable to set up drift controller: %v", err)
+	deploymentReconciler := &controller.DriftReconciler{
+		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), OnDriftFound: persistDrift,
+	}
+	if err := deploymentReconciler.SetupWithManager(mgr); err != nil {
+		log.Fatalf("operator: unable to set up deployment drift controller: %v", err)
 	}
 
-	log.Println("terrasentry operator started — watching Deployments for drift")
+	statefulSetReconciler := &controller.StatefulSetDriftReconciler{
+		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), OnDriftFound: persistDrift,
+	}
+	if err := statefulSetReconciler.SetupWithManager(mgr); err != nil {
+		log.Fatalf("operator: unable to set up statefulset drift controller: %v", err)
+	}
+
+	configMapReconciler := &controller.ConfigMapDriftReconciler{
+		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), OnDriftFound: persistDrift,
+	}
+	if err := configMapReconciler.SetupWithManager(mgr); err != nil {
+		log.Fatalf("operator: unable to set up configmap drift controller: %v", err)
+	}
+
+	log.Println("terrasentry operator started — watching Deployments, StatefulSets, and ConfigMaps for drift")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("operator: manager exited with error: %v", err)
 	}
