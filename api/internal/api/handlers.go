@@ -6,17 +6,66 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 
+	"github.com/MuaazTasawar/terrasentry/api/internal/auth"
 	"github.com/MuaazTasawar/terrasentry/api/internal/notify"
 )
 
 type Handler struct {
-	Pool     *pgxpool.Pool
-	Notifier *notify.Notifier
+	Pool           *pgxpool.Pool
+	Notifier       *notify.Notifier
+	JWTSecret      string
+	JWTExpiryHours int
 }
 
-func NewHandler(pool *pgxpool.Pool, notifier *notify.Notifier) *Handler {
-	return &Handler{Pool: pool, Notifier: notifier}
+func NewHandler(pool *pgxpool.Pool, notifier *notify.Notifier, jwtSecret string, jwtExpiryHours int) *Handler {
+	return &Handler{Pool: pool, Notifier: notifier, JWTSecret: jwtSecret, JWTExpiryHours: jwtExpiryHours}
+}
+
+// --- Auth ---
+
+type loginInput struct {
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// Login verifies email/password against the users table and, on success,
+// issues a signed JWT for use as a Bearer token on protected endpoints.
+func (h *Handler) Login(c *gin.Context) {
+	var input loginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var (
+		userID       string
+		passwordHash string
+	)
+	err := h.Pool.QueryRow(c.Request.Context(),
+		`SELECT id, password_hash FROM users WHERE email = $1`,
+		input.Email,
+	).Scan(&userID, &passwordHash)
+	if err != nil {
+		// Same response whether the user doesn't exist or the password is
+		// wrong, so login can't be used to enumerate registered emails.
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+		return
+	}
+
+	token, err := auth.GenerateToken(h.JWTSecret, h.JWTExpiryHours, userID, input.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": token, "expires_in_hours": h.JWTExpiryHours})
 }
 
 // --- Plan Scans ---

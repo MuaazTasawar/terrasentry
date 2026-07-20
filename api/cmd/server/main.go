@@ -21,7 +21,7 @@ func main() {
 	log.Println("connected to database")
 
 	notifier := notify.NewNotifier(cfg.FCMServerKey, pool)
-	router := api.NewRouter(pool, notifier)
+	router := api.NewRouter(pool, notifier, cfg)
 
 	log.Printf("terrasentry api listening on :%s (%s)", cfg.Port, cfg.Env)
 	if err := router.Run(":" + cfg.Port); err != nil {
