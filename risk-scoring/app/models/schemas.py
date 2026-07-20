@@ -7,6 +7,7 @@ class ResourceChange(BaseModel):
     action: str  # "create" | "update" | "delete" | "replace"
     resource_type: str
     provider: str
+    tags: dict = Field(default_factory=dict)
 
 
 class ScanRequest(BaseModel):
@@ -22,6 +23,7 @@ class ScanResponse(BaseModel):
     flagged_resources: List[str]
     resource_changes: List[ResourceChange]
     summary: str
+    policy_flags: List[str] = []
 
 
 class LLMRiskResult(BaseModel):

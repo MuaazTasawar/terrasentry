@@ -56,6 +56,80 @@ async def test_evaluate_plan_uses_score_derived_level_not_llm_claim():
 
 
 @pytest.mark.asyncio
+async def test_evaluate_plan_policy_raises_level_for_iam_change():
+    """End-to-end: the real policy.yaml's 'iam-changes-at-least-medium' rule
+    must raise a low-scored IAM change up to medium, even though the LLM
+    (and the score thresholds) both said low."""
+    plan = {
+        "resource_changes": [
+            {"address": "aws_iam_role.admin", "type": "aws_iam_role",
+             "provider_name": "aws", "change": {"actions": ["update"], "after": {"tags": {}}}},
+        ]
+    }
+
+    fake_llm_response = {
+        "risk_score": 10,
+        "risk_level": "low",
+        "reasoning": "minor IAM tweak",
+        "flagged_resources": [],
+    }
+
+    with patch("app.services.risk_engine.llm_client.score_plan", new=AsyncMock(return_value=fake_llm_response)):
+        result = await risk_engine.evaluate_plan(repo_name="test-repo", plan_json=plan)
+
+    assert result.risk_level == "medium"
+    assert any("iam-changes-at-least-medium" in flag for flag in result.policy_flags)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_plan_policy_does_not_override_higher_llm_score():
+    """The policy floor must never pull a level down — a high-scored change
+    on an IAM resource stays high, it doesn't get reset to the rule's
+    medium minimum."""
+    plan = {
+        "resource_changes": [
+            {"address": "aws_iam_role.admin", "type": "aws_iam_role",
+             "provider_name": "aws", "change": {"actions": ["update"], "after": {"tags": {}}}},
+        ]
+    }
+
+    fake_llm_response = {
+        "risk_score": 95,
+        "risk_level": "high",
+        "reasoning": "IAM role granted full admin access",
+        "flagged_resources": ["aws_iam_role.admin"],
+    }
+
+    with patch("app.services.risk_engine.llm_client.score_plan", new=AsyncMock(return_value=fake_llm_response)):
+        result = await risk_engine.evaluate_plan(repo_name="test-repo", plan_json=plan)
+
+    assert result.risk_level == "high"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_plan_policy_raises_level_for_prod_tagged_delete():
+    plan = {
+        "resource_changes": [
+            {"address": "aws_db_instance.prod", "type": "aws_db_instance", "provider_name": "aws",
+             "change": {"actions": ["delete"], "before": {"tags": {"env": "prod"}}, "after": None}},
+        ]
+    }
+
+    fake_llm_response = {
+        "risk_score": 20,
+        "risk_level": "low",
+        "reasoning": "looks like routine cleanup",
+        "flagged_resources": [],
+    }
+
+    with patch("app.services.risk_engine.llm_client.score_plan", new=AsyncMock(return_value=fake_llm_response)):
+        result = await risk_engine.evaluate_plan(repo_name="test-repo", plan_json=plan)
+
+    assert result.risk_level == "high"
+    assert any("prod-deletes-are-high" in flag for flag in result.policy_flags)
+
+
+@pytest.mark.asyncio
 async def test_evaluate_plan_passes_through_flagged_resources():
     plan = {
         "resource_changes": [

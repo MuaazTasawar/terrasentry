@@ -67,3 +67,38 @@ def test_build_plan_summary_lists_each_change():
     assert "2 resource change(s)" in summary
     assert "aws_instance.new" in summary
     assert "aws_s3_bucket.old" in summary
+
+
+def test_parse_plan_extracts_tags_from_after_on_create():
+    plan = {
+        "resource_changes": [
+            {"address": "aws_instance.new", "type": "aws_instance", "provider_name": "aws",
+             "change": {"actions": ["create"], "after": {"tags": {"env": "prod"}}}},
+        ]
+    }
+    result = parse_plan(plan)
+    assert result[0].tags == {"env": "prod"}
+
+
+def test_parse_plan_extracts_tags_from_before_on_delete():
+    # A delete's `after` block is null, so tags must come from `before` —
+    # this is what lets a policy rule catch "delete a prod-tagged resource".
+    plan = {
+        "resource_changes": [
+            {"address": "aws_s3_bucket.old", "type": "aws_s3_bucket", "provider_name": "aws",
+             "change": {"actions": ["delete"], "before": {"tags": {"env": "prod"}}, "after": None}},
+        ]
+    }
+    result = parse_plan(plan)
+    assert result[0].tags == {"env": "prod"}
+
+
+def test_parse_plan_missing_tags_defaults_to_empty_dict():
+    plan = {
+        "resource_changes": [
+            {"address": "aws_instance.untagged", "type": "aws_instance", "provider_name": "aws",
+             "change": {"actions": ["create"], "after": {}}},
+        ]
+    }
+    result = parse_plan(plan)
+    assert result[0].tags == {}

@@ -1,0 +1,17 @@
+# TerraSentry risk policy - declarative floor/override rules layered on
+# top of the LLM's judgment. A rule never lowers risk, only raises it: if
+# the LLM already scored something higher than a matching rule's min_level,
+# the LLM's score wins. Edit this file to add rules; no code changes needed.
+
+rules:
+  - name: iam-changes-at-least-medium
+    resource_type_prefix: aws_iam_
+    min_level: medium
+    reason: IAM changes carry elevated blast radius regardless of LLM score
+
+  - name: prod-deletes-are-high
+    action: delete
+    tag_equals:
+      env: prod
+    min_level: high
+    reason: Deletes on resources tagged env=prod are always treated as high risk

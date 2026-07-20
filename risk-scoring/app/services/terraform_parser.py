@@ -25,10 +25,23 @@ def parse_plan(plan_json: dict) -> list[ResourceChange]:
                 action=action,
                 resource_type=rc.get("type", "unknown"),
                 provider=rc.get("provider_name", "unknown"),
+                tags=_extract_tags(rc, action),
             )
         )
 
     return changes
+
+
+def _extract_tags(rc: dict, action: str) -> dict:
+    """Pull the `tags` attribute off a resource change. Deletes have a null
+    `after` block, so we read tags from `before` in that case; every other
+    action reads from `after` (the state the resource is moving to)."""
+    change = rc.get("change", {})
+    side = change.get("before") if action == "delete" else change.get("after")
+    if not isinstance(side, dict):
+        return {}
+    tags = side.get("tags")
+    return tags if isinstance(tags, dict) else {}
 
 
 def _normalize_actions(actions: list[str]) -> str:

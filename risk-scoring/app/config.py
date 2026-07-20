@@ -14,5 +14,7 @@ class Settings:
     RISK_SCORE_HIGH_THRESHOLD: int = int(os.getenv("RISK_SCORE_HIGH_THRESHOLD", "75"))
     RISK_SCORE_MEDIUM_THRESHOLD: int = int(os.getenv("RISK_SCORE_MEDIUM_THRESHOLD", "40"))
 
+    POLICY_FILE_PATH: str = os.getenv("POLICY_FILE_PATH", "app/policy.yaml")
+
 
 settings = Settings()
