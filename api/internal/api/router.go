@@ -26,11 +26,14 @@ func NewRouter(pool *pgxpool.Pool, notifier *notify.Notifier, cfg *config.Config
 
 		v1.POST("/scans", h.CreateScan)
 		v1.GET("/scans/pending", h.ListPendingScans)
+		v1.GET("/scans", authRequired, h.ListAllScans)
 		v1.POST("/scans/:id/decision", authRequired, h.DecideScan)
 
 		v1.POST("/devices", authRequired, h.RegisterDevice)
 
 		v1.GET("/drift-events", h.ListDriftEvents)
+
+		v1.GET("/audit", authRequired, h.ListApprovalAudit)
 	}
 
 	return router

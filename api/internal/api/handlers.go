@@ -271,3 +271,83 @@ func (h *Handler) ListDriftEvents(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"events": events})
 }
+
+// ListAllScans returns scan history for the dashboard — unlike
+// ListPendingScans (which only shows unresolved scans for the mobile
+// approval queue) this returns every scan, optionally filtered by
+// status and/or risk_level query params.
+func (h *Handler) ListAllScans(c *gin.Context) {
+	status := c.Query("status")
+	riskLevel := c.Query("risk_level")
+
+	query := `
+		SELECT id, repo_name, plan_summary, risk_score, risk_level, reasoning, status, created_at
+		FROM plan_scans
+		WHERE ($1 = '' OR status = $1)
+		  AND ($2 = '' OR risk_level = $2)
+		ORDER BY created_at DESC
+		LIMIT 200
+	`
+
+	rows, err := h.Pool.Query(c.Request.Context(), query, status, riskLevel)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	scans := []gin.H{}
+	for rows.Next() {
+		var (
+			id, repoName, planSummary, riskLevelVal, reasoning, statusVal string
+			riskScore                                                     int
+			createdAt                                                     interface{}
+		)
+		if err := rows.Scan(&id, &repoName, &planSummary, &riskScore, &riskLevelVal, &reasoning, &statusVal, &createdAt); err != nil {
+			continue
+		}
+		scans = append(scans, gin.H{
+			"id": id, "repo_name": repoName, "plan_summary": planSummary,
+			"risk_score": riskScore, "risk_level": riskLevelVal, "reasoning": reasoning,
+			"status": statusVal, "created_at": createdAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"scans": scans})
+}
+
+// --- Approval Audit ---
+
+// ListApprovalAudit returns the approve/reject decision trail (joined with
+// the scan it belongs to) for the dashboard's audit view.
+func (h *Handler) ListApprovalAudit(c *gin.Context) {
+	rows, err := h.Pool.Query(c.Request.Context(), `
+		SELECT a.id, a.plan_scan_id, s.repo_name, a.decision, a.decided_by, a.decided_at
+		FROM approval_audit a
+		JOIN plan_scans s ON s.id = a.plan_scan_id
+		ORDER BY a.decided_at DESC
+		LIMIT 200
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	entries := []gin.H{}
+	for rows.Next() {
+		var (
+			id, planScanID, repoName, decision, decidedBy string
+			decidedAt                                     interface{}
+		)
+		if err := rows.Scan(&id, &planScanID, &repoName, &decision, &decidedBy, &decidedAt); err != nil {
+			continue
+		}
+		entries = append(entries, gin.H{
+			"id": id, "plan_scan_id": planScanID, "repo_name": repoName,
+			"decision": decision, "decided_by": decidedBy, "decided_at": decidedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"audit": entries})
+}
