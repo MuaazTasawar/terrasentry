@@ -3,6 +3,7 @@ import '../models/approval_request.dart';
 import '../services/api_service.dart';
 import '../widgets/approval_card.dart';
 import 'approval_detail_screen.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,10 +29,29 @@ class _HomeScreenState extends State<HomeScreen> {
     await _pendingScans;
   }
 
+  Future<void> _logout() async {
+    await _api.logout();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pending Approvals')),
+      appBar: AppBar(
+        title: const Text('Pending Approvals'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
+            onPressed: _logout,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<List<ApprovalRequest>>(

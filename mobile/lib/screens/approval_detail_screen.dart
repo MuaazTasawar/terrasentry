@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/approval_request.dart';
 import '../services/api_service.dart';
+import 'login_screen.dart';
 
 class ApprovalDetailScreen extends StatefulWidget {
   final ApprovalRequest request;
@@ -20,6 +21,13 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
     try {
       await _api.decide(widget.request.id, decision);
       if (mounted) Navigator.pop(context);
+    } on UnauthorizedException {
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
